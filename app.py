@@ -5,7 +5,9 @@ from core.logic import (
     save_to_json, 
     create_bill_dataframe,
     load_participants,
-    save_participants
+    save_participants,
+    load_groups,
+    save_groups
 )
 from core.models import Bill
 
@@ -58,60 +60,89 @@ if 'bill' not in st.session_state:
 # Update bill description if it changes
 st.session_state.bill.description = bill_title
 
-# Load participants from file on first run
+# Load participants and groups from files on first run
 if 'all_participants' not in st.session_state:
     st.session_state.all_participants = load_participants()
-    # Also populate the bill object with these participants
     for name in st.session_state.all_participants:
         st.session_state.bill.add_participant(name)
+if 'groups' not in st.session_state:
+    st.session_state.groups = load_groups()
 
 
-# --- UI for Adding Participants ---
-st.header("Add or Manage Participants")
+# --- UI for Adding Participants and Groups ---
+st.header("Manage Participants & Groups")
 
-# Define a callback function to handle adding a participant
-def add_participant_callback():
-    participant_name = st.session_state.participant_input
-    if participant_name and participant_name not in st.session_state.all_participants:
-        st.session_state.all_participants.append(participant_name)
-        st.session_state.bill.add_participant(participant_name)
-        save_participants(st.session_state.all_participants) # Save to file
-    elif not participant_name:
-        st.warning("Please enter a participant name.")
-    else:
-        st.warning(f"Participant '{participant_name}' already exists.")
-    st.session_state.participant_input = ""
+with st.expander("Add or Remove Individual Participants"):
+    # Define a callback function to handle adding a participant
+    def add_participant_callback():
+        participant_name = st.session_state.participant_input
+        if participant_name and participant_name not in st.session_state.all_participants:
+            st.session_state.all_participants.append(participant_name)
+            st.session_state.bill.add_participant(participant_name)
+            save_participants(st.session_state.all_participants) # Save to file
+        elif not participant_name:
+            st.warning("Please enter a participant name.")
+        else:
+            st.warning(f"Participant '{participant_name}' already exists.")
+        st.session_state.participant_input = ""
 
-st.text_input(
-    "Add New Participant", 
-    key="participant_input", 
-    on_change=add_participant_callback,
-    placeholder="Enter name and press Enter"
-)
+    st.text_input(
+        "Add New Participant", 
+        key="participant_input", 
+        on_change=add_participant_callback,
+        placeholder="Enter name and press Enter"
+    )
 
-# UI for Removing Participants
-if st.session_state.all_participants:
-    with st.expander("Manage Saved Participants"):
+    # UI for Removing Participants
+    if st.session_state.all_participants:
         participants_to_remove = st.multiselect(
             "Select participants to remove permanently",
             options=st.session_state.all_participants
         )
         if st.button("Remove Selected Participants"):
             if participants_to_remove:
-                # Filter out the participants to remove
-                st.session_state.all_participants = [
-                    p for p in st.session_state.all_participants if p not in participants_to_remove
-                ]
-                # Save the updated list
+                st.session_state.all_participants = [p for p in st.session_state.all_participants if p not in participants_to_remove]
                 save_participants(st.session_state.all_participants)
                 st.success("Removed selected participants.")
-                st.rerun() # Rerun to update UI
+                st.rerun()
             else:
                 st.info("No participants selected to remove.")
 
-# Display current participants
+with st.expander("Create or Delete Groups"):
+    # UI for creating a new group
+    st.subheader("Create a New Group")
+    new_group_name = st.text_input("New Group Name")
+    new_group_members = st.multiselect(
+        "Select members for the new group",
+        options=sorted(st.session_state.all_participants)
+    )
+    if st.button("Create Group"):
+        if new_group_name and new_group_members:
+            st.session_state.groups[new_group_name] = new_group_members
+            save_groups(st.session_state.groups)
+            st.success(f"Group '{new_group_name}' created.")
+        else:
+            st.warning("Please provide a group name and select at least one member.")
+
+    # UI for deleting an existing group
+    if st.session_state.groups:
+        st.subheader("Delete an Existing Group")
+        group_to_delete = st.selectbox(
+            "Select group to delete",
+            options=list(st.session_state.groups.keys())
+        )
+        if st.button("Delete Selected Group"):
+            if group_to_delete:
+                del st.session_state.groups[group_to_delete]
+                save_groups(st.session_state.groups)
+                st.success(f"Group '{group_to_delete}' deleted.")
+                st.rerun()
+
+# Display current participants and groups
 if st.session_state.all_participants:
     st.write("Current Participants:", ", ".join(sorted(st.session_state.all_participants)))
+if st.session_state.groups:
+    st.write("Available Groups:", ", ".join(st.session_state.groups.keys()))
 
 
 # --- UI for Adding Items ---
@@ -120,9 +151,20 @@ if st.session_state.all_participants:
     with st.form("add_item_form", clear_on_submit=True):
         item_name = st.text_input("Item Name")
         item_price = st.number_input("Item Price", min_value=0.01, format="%.2f")
+        
+        # --- Group Selection ---
+        group_options = ["(Manual Selection)"] + list(st.session_state.groups.keys())
+        selected_group = st.selectbox("Quick Select a Group", options=group_options)
+        
+        # Determine default participants based on group selection
+        default_participants = []
+        if selected_group and selected_group != "(Manual Selection)":
+            default_participants = st.session_state.groups[selected_group]
+
         selected_participants = st.multiselect(
             "Select Participants for this item",
-            st.session_state.all_participants
+            st.session_state.all_participants,
+            default=default_participants
         )
         submitted = st.form_submit_button("Add Item")
         if submitted:

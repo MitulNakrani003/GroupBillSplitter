@@ -3,6 +3,7 @@ import pandas as pd
 from .models import Bill, Item
 
 PARTICIPANTS_FILE = "participants.json"
+GROUPS_FILE = "groups.json"
 
 def load_participants():
     """Loads the list of participants from a JSON file."""
@@ -16,6 +17,19 @@ def save_participants(participants):
     """Saves the list of participants to a JSON file."""
     with open(PARTICIPANTS_FILE, 'w') as f:
         json.dump(sorted(participants), f, indent=4)
+
+def load_groups():
+    """Loads participant groups from a JSON file."""
+    try:
+        with open(GROUPS_FILE, 'r') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+def save_groups(groups):
+    """Saves participant groups to a JSON file."""
+    with open(GROUPS_FILE, 'w') as f:
+        json.dump(groups, f, indent=4)
 
 def add_item_to_bill(bill: Bill, item_name: str, price: float, participant_names: list):
     """Adds an item to the bill and splits the cost."""
