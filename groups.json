@@ -1,8 +1,4 @@
 {
-    "Misha": [
-        "Mitul",
-        "Esha"
-    ],
     "Everyone": [
         "Aashi",
         "Darshan",
@@ -28,5 +24,9 @@
         "Neeraja",
         "Parthiv",
         "Yug"
+    ],
+    "MitulEsha": [
+        "Esha",
+        "Mitul"
     ]
 }
