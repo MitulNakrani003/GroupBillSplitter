@@ -1,0 +1,16 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyInstaller
+/dist/
+/build/
+BillSplitter.spec
+
+# Virtual environment
+venv/
+.venv/
+
+# Output files
+bill_summary.json

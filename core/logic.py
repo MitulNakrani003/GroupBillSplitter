@@ -1,9 +1,21 @@
 import json
 import pandas as pd
+import sys
+import os
 from .models import Bill, Item
 
-PARTICIPANTS_FILE = "participants.json"
-GROUPS_FILE = "groups.json"
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
+PARTICIPANTS_FILE = resource_path("participants.json")
+GROUPS_FILE = resource_path("groups.json")
 
 def load_participants():
     """Loads the list of participants from a JSON file."""
@@ -74,16 +86,16 @@ def save_to_json(bill: Bill, filename="bill_summary.json"):
     try:
         df = create_bill_dataframe(bill)
         
-        # Create a dictionary to hold both the title and the table data
         output_data = {
             "bill_title": bill.description,
             "summary_table": df.to_dict(orient='index')
         }
 
-        with open(filename, 'w') as f:
-            # Dump the dictionary to the JSON file
+        # Use the resource_path for the output file as well
+        output_path = resource_path(filename)
+        with open(output_path, 'w') as f:
             json.dump(output_data, f, indent=4)
             
-        return True, f"Data saved to {filename}"
+        return True, f"Data saved to {output_path}"
     except Exception as e:
         return False, f"Error saving to JSON: {e}"
