@@ -4,6 +4,7 @@ from core.logic import (
     calculate_totals, 
     save_to_json, 
     create_bill_dataframe,
+    get_bill_as_json_string, # <-- Import the new function
     load_participants,
     save_participants,
     load_groups,
@@ -14,6 +15,11 @@ from core.models import Bill
 # --- Custom CSS for larger UI elements ---
 st.markdown("""
 <style>
+    /* Widen the main content area */
+    .block-container {
+        max-width: 60% !important;
+    }
+
     /* Increase base font size for the whole app */
     html, body, [class*="st-"], .st-emotion-cache-10trblm {
         font-size: 1.1rem;
@@ -40,10 +46,8 @@ st.markdown("""
         width: 100%;
     }
 
-    /* Increase font size in the final dataframe */
-    .stDataFrame {
-        font-size: 1.1rem;
-    }
+    /* REMOVE THE DATAFRAME STYLES FROM HERE, AS WE WILL APPLY THEM DIRECTLY */
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -73,27 +77,51 @@ with tab1:
     # --- UI for Adding Items ---
     st.header("Add Items")
     if st.session_state.all_participants:
+        # Initialize a state variable to hold the participants for the item being added
+        if 'item_participants' not in st.session_state:
+            st.session_state.item_participants = []
+
+        # Callback function to update participants when a group is selected
+        def on_group_select():
+            group = st.session_state.group_selector
+            if group and group != "— Select a group to pre-fill —":
+                st.session_state.item_participants = st.session_state.groups[group]
+            else:
+                # If manual/no group is selected, clear the participants
+                st.session_state.item_participants = []
+
+        # --- Group selection is now OUTSIDE the form ---
+        group_options = ["— Select a group to pre-fill —"] + list(st.session_state.groups.keys())
+        st.selectbox(
+            "Quick Select a Group", 
+            options=group_options, 
+            key="group_selector",
+            on_change=on_group_select
+        )
+
+        # --- The form now only contains the final inputs ---
+        # Add clear_on_submit=True to the form
         with st.form("add_item_form", clear_on_submit=True):
             item_name = st.text_input("Item Name")
             item_price = st.number_input("Item Price", min_value=0.01, format="%.2f")
             
-            group_options = ["(Manual Selection)"] + list(st.session_state.groups.keys())
-            selected_group = st.selectbox("Quick Select a Group", options=group_options)
-            
-            default_participants = []
-            if selected_group and selected_group != "(Manual Selection)":
-                default_participants = st.session_state.groups[selected_group]
-
+            # The multiselect uses the state variable, which was set by the widget outside the form
             selected_participants = st.multiselect(
                 "Select Participants for this item",
                 st.session_state.all_participants,
-                default=default_participants
+                default=st.session_state.item_participants
             )
+            
             submitted = st.form_submit_button("Add Item")
             if submitted:
                 if item_name and item_price > 0 and selected_participants:
                     st.session_state.bill.add_item(item_name, item_price, selected_participants)
+                    # Clear the participants list for the next item
+                    st.session_state.item_participants = []
+                    # REMOVE the line that causes the error
+                    # st.session_state.group_selector = "— Select a group to pre-fill —"
                     st.success(f"Added item: {item_name}")
+                    st.rerun() # Rerun to refresh the display and reset the group selector
                 else:
                     st.error("Please fill all fields and select at least one participant.")
     else:
@@ -120,14 +148,20 @@ with tab1:
             def get_table_styler(df):
                 participant_columns = [p for p in df.columns if p != 'Total Price']
                 styles = [
-                    {'selector': 'th, td', 'props': 'border: 1.5px solid black;'},
-                    {'selector': 'table', 'props': 'border-collapse: collapse; border: 2px solid black;'},
-                    {'selector': 'th.col_heading.level0.col0', 'props': 'background-color: yellow;'},
-                    {'selector': 'td.col0', 'props': 'background-color: #ffffe0;'}, 
+                    # Apply font size, color, and border to all cells and headers
+                    {'selector': 'th, td', 
+                    'props': [
+                        ('font-size', '1.4rem'), 
+                        ('color', 'black'),
+                        ('border', '1.5px solid black')
+                    ]},
+                    {'selector': 'table', 'props': [('border-collapse', 'collapse'), ('border', '2px solid black')]},
+                    {'selector': 'th.col_heading.level0.col0', 'props': [('background-color', 'yellow')]},
+                    {'selector': 'td.col0', 'props': [('background-color', '#ffffe0')]}, 
                 ]
                 for i, col_name in enumerate(df.columns):
                     if col_name in participant_columns:
-                        styles.append({'selector': f'th.col_heading.level0.col{i}', 'props': 'background-color: lightgreen;'})
+                        styles.append({'selector': f'th.col_heading.level0.col{i}', 'props': [('background-color', 'lightgreen')]})
                 def currency_formatter(val):
                     if val == 0: return '-'
                     return f'${val:,.2f}'
@@ -135,14 +169,16 @@ with tab1:
                 styler.set_table_styles(styles)
                 return styler
             st.dataframe(get_table_styler(summary_df))
-            if st.button("Save Results to JSON"):
-                success, message = save_to_json(st.session_state.bill)
-                if success:
-                    st.success(message)
-                    with open("bill_summary.json", "r") as f:
-                        st.download_button("Download JSON", f, "bill_summary.json", "application/json")
-                else:
-                    st.error(message)
+
+            # --- Updated Download Logic ---
+            json_string = get_bill_as_json_string(st.session_state.bill)
+            if json_string:
+                st.download_button(
+                    label="Download Bill as JSON",
+                    data=json_string,
+                    file_name=f"{st.session_state.bill.description.replace(' ', '_')}.json",
+                    mime="application/json",
+                )
     else:
         st.info("No items added to the bill yet.")
 

@@ -69,9 +69,17 @@ def create_bill_dataframe(bill: Bill):
         price = item['price']
         participants = item['participants']
         if participants:
-            split_amount = price / len(participants)
-            for p_name in participants:
+            num_participants = len(participants)
+            # Calculate split in cents to avoid floating point errors and handle remainder
+            price_in_cents = int(round(price * 100))
+            base_split_cents = price_in_cents // num_participants
+            remainder_cents = price_in_cents % num_participants
+
+            for i, p_name in enumerate(participants):
                 if p_name in df.columns:
+                    # Add one cent from the remainder to the first few participants
+                    extra_cent = 1 if i < remainder_cents else 0
+                    split_amount = (base_split_cents + extra_cent) / 100.0
                     df.loc[item_name, p_name] = split_amount
 
     # Add 'Total' row at the end
@@ -80,6 +88,19 @@ def create_bill_dataframe(bill: Bill):
     df.loc['Total', 'Total Price'] = df['Total Price'].iloc[:-1].sum()
 
     return df
+
+def get_bill_as_json_string(bill: Bill):
+    """Generates the bill summary as a JSON formatted string."""
+    try:
+        df = create_bill_dataframe(bill)
+        output_data = {
+            "bill_title": bill.description,
+            "summary_table": df.to_dict(orient='index')
+        }
+        return json.dumps(output_data, indent=4)
+    except Exception as e:
+        return None
+
 
 def save_to_json(bill: Bill, filename="bill_summary.json"):
     """Saves the bill title and summary dataframe to a JSON file."""
