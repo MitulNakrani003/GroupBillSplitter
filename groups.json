@@ -8,7 +8,8 @@
         "Neeraja",
         "Parthiv",
         "Tanha",
-        "Yug"
+        "Yug",
+        "Chahi"
     ],
     "Milk Only": [
         "Aashi",
@@ -23,10 +24,22 @@
         "Tanha",
         "Neeraja",
         "Parthiv",
-        "Yug"
+        "Yug",
+        "Chahi"
     ],
     "MitulEsha": [
         "Esha",
         "Mitul"
+    ],
+    "FruitSalad": [
+        "Darshan",
+        "Esha",
+        "Keshvi",
+        "Mitul",
+        "Neeraja",
+        "Parthiv",
+        "Tanha",
+        "Yug",
+        "Dins"
     ]
 }

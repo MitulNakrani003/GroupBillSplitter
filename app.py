@@ -4,13 +4,19 @@ from core.logic import (
     calculate_totals, 
     save_to_json, 
     create_bill_dataframe,
-    get_bill_as_json_string, # <-- Import the new function
+    get_bill_as_json_string,
     load_participants,
     save_participants,
     load_groups,
     save_groups
 )
 from core.models import Bill
+from io import BytesIO
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -125,9 +131,9 @@ st.markdown("""
         background: #5a67d8;
         color: white;
         border: none;
-        border-radius: 8px;
-        padding: 0.7rem 1.25rem;
-        font-size: 1rem;
+        border-radius: 6px;
+        padding: 0.5rem 1rem;
+        font-size: 0.95rem;
         font-weight: 500;
         transition: all 0.2s ease;
         box-shadow: 0 2px 4px rgba(90, 103, 216, 0.2);
@@ -296,11 +302,64 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- Main Title with gradient ---
+# --- Helper Functions ---
+
+def generate_pdf(bill):
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    elements = []
+    styles = getSampleStyleSheet()
+
+    # Title
+    title_style = styles['Title']
+    title_style.fontName = 'Helvetica-Bold'
+    elements.append(Paragraph(f"Bill: {bill.description}", title_style))
+    elements.append(Spacer(1, 12))
+
+    # Data for table
+    data = [['Item', 'Price', 'Participants']]
+    for item in bill.items:
+        data.append([
+            item['item_name'],
+            f"${item['price']:.2f}",
+            ", ".join(item['participants'])
+        ])
+    
+    # Create Table
+    if len(data) > 1:
+        t = Table(data, colWidths=[200, 100, 200])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ]))
+        elements.append(t)
+    else:
+        elements.append(Paragraph("No items in this bill.", styles['Normal']))
+    
+    # Total
+    elements.append(Spacer(1, 12))
+    total = sum(item['price'] for item in bill.items)
+    elements.append(Paragraph(f"Total: ${total:.2f}", styles['Heading2']))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
+
+def reset_bill():
+    st.session_state.bill = Bill(description="New Bill")
+    st.rerun()
+
+# --- Main App Logic ---
+
 st.markdown('<h1 class="main-title">💰 Bill Splitter</h1>', unsafe_allow_html=True)
 st.markdown('<p class="subtitle">Split bills fairly among friends with ease</p>', unsafe_allow_html=True)
 
-# Initialize state (runs only once)
+# Initialize state
 if 'bill' not in st.session_state:
     st.session_state.bill = Bill(description="New Bill")
 if 'all_participants' not in st.session_state:
@@ -310,313 +369,193 @@ if 'all_participants' not in st.session_state:
 if 'groups' not in st.session_state:
     st.session_state.groups = load_groups()
 
-# --- Define Tabs ---
+# Top Bar: New Bill Button
+col_header_1, col_header_2 = st.columns([3, 1])
+with col_header_1:
+    bill_title = st.text_input("Bill Title", value=st.session_state.bill.description, key="bill_title_input")
+    st.session_state.bill.description = bill_title
+with col_header_2:
+    st.write("") # Spacer
+    st.write("") # Spacer
+    if st.button("✨ New Bill"):
+        reset_bill()
+
 tab1, tab2 = st.tabs(["📝 Bill Entry", "👥 Manage Participants & Groups"])
 
-
-# --- Tab 1: Bill Entry ---
 with tab1:
-    # Create two columns for better layout
-    col_left, col_right = st.columns([1, 1], gap="large")
+    # --- Input Section ---
+    st.markdown("### ➕ Add Items")
     
-    with col_left:
-        # --- UI for Bill Title ---
-        st.markdown("### 📋 Bill Details")
-        bill_title = st.text_input("Enter Bill Title", value=st.session_state.bill.description, placeholder="e.g., Dinner at Restaurant")
-        st.session_state.bill.description = bill_title
-
-        # --- UI for Adding Items ---
-        st.markdown("### ➕ Add Items")
-        if st.session_state.all_participants:
-            # Initialize a state variable to hold the participants for the item being added
-            if 'item_participants' not in st.session_state:
-                st.session_state.item_participants = []
+    # Group Selection Logic
+    if 'group_selector_key' not in st.session_state:
+        st.session_state.group_selector_key = 0
+    
+    def on_group_select():
+        group = st.session_state[f"group_select_{st.session_state.group_selector_key}"]
+        if group and group != "— Select a group to pre-fill —":
+            st.session_state.participant_multiselect = st.session_state.groups[group]
+    
+    group_options = ["— Select a group to pre-fill —"] + list(st.session_state.groups.keys())
+    
+    col_input_1, col_input_2 = st.columns([1, 2])
+    
+    with col_input_1:
+         st.selectbox(
+            "Quick Select a Group", 
+            options=group_options, 
+            key=f"group_select_{st.session_state.group_selector_key}",
+            on_change=on_group_select
+        )
+    
+    # Callback for adding item
+    def add_item_callback():
+        name = st.session_state.new_item_name
+        price = st.session_state.new_item_price
+        participants = st.session_state.participant_multiselect
+        
+        if name and price > 0 and participants:
+            st.session_state.bill.add_item(name, price, participants)
+            st.session_state.form_msg = f"✅ Added item: {name}"
+            st.session_state.form_msg_type = "success"
             
-            # Initialize state to track if we need to reset the group selector
-            if 'reset_group_selector' not in st.session_state:
-                st.session_state.reset_group_selector = False
-
-            # Callback function to update participants when a group is selected
-            def on_group_select():
-                group = st.session_state.group_selector
-                if group and group != "— Select a group to pre-fill —":
-                    st.session_state.item_participants = st.session_state.groups[group]
-                else:
-                    # If manual/no group is selected, clear the participants
-                    st.session_state.item_participants = []
-
-            # --- Group selection is now OUTSIDE the form ---
-            group_options = ["— Select a group to pre-fill —"] + list(st.session_state.groups.keys())
-            
-            # Reset the group selector if flag is set
-            default_index = 0
-            if st.session_state.reset_group_selector:
-                st.session_state.reset_group_selector = False
-                # Force the selector to the default option
-                if 'group_selector' in st.session_state:
-                    del st.session_state.group_selector
-            
-            st.selectbox(
-                "Quick Select a Group", 
-                options=group_options, 
-                key="group_selector",
-                on_change=on_group_select
-            )
-
-            # --- The form now only contains the final inputs ---
-            # Add clear_on_submit=True to the form
-            with st.form("add_item_form", clear_on_submit=True):
-                item_name = st.text_input("Item Name", placeholder="e.g., Pizza, Drinks")
-                item_price = st.number_input("Item Price", min_value=0.01, format="%.2f")
-                
-                # The multiselect uses the state variable, which was set by the widget outside the form
-                selected_participants = st.multiselect(
-                    "Select Participants for this item",
-                    st.session_state.all_participants,
-                    default=st.session_state.item_participants
-                )
-                
-                submitted = st.form_submit_button("➕ Add Item")
-                if submitted:
-                    if item_name and item_price > 0 and selected_participants:
-                        st.session_state.bill.add_item(item_name, item_price, selected_participants)
-                        # Clear the participants list for the next item
-                        st.session_state.item_participants = []
-                        # Set flag to reset the group selector on next rerun
-                        st.session_state.reset_group_selector = True
-                        st.success(f"✅ Added item: {item_name}")
-                        st.rerun() # Rerun to refresh the display and reset the group selector
-                    else:
-                        st.error("Please fill all fields and select at least one participant.")
+            # Clear inputs manually since we aren't using clear_on_submit
+            st.session_state.new_item_name = ""
+            st.session_state.new_item_price = 0.0
+            st.session_state.participant_multiselect = []
+            st.session_state.group_selector_key += 1 # Reset group selector
         else:
-            st.warning("👋 Please add at least one participant in the 'Manage' tab to start adding items.")
+            st.session_state.form_msg = "Please fill all fields and select at least one participant."
+            st.session_state.form_msg_type = "error"
 
-        # --- UI for Removing Items ---
-        if st.session_state.bill.items:
-            st.markdown("### 🗑️ Remove an Item")
+    # Display message if exists
+    if 'form_msg' in st.session_state and st.session_state.form_msg:
+        if st.session_state.form_msg_type == "success":
+            st.success(st.session_state.form_msg)
+        else:
+            st.error(st.session_state.form_msg)
+        # Clear message after display so it doesn't persist forever
+        st.session_state.form_msg = None
+
+    # Form
+    with st.form("add_item_form", clear_on_submit=False):
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            st.text_input("Item Name", placeholder="e.g., Pizza, Drinks", key="new_item_name")
+        with c2:
+            st.number_input("Item Price", min_value=0.0, format="%.2f", key="new_item_price")
+        
+        # Participants Multiselect
+        if 'participant_multiselect' not in st.session_state:
+            st.session_state.participant_multiselect = []
+
+        st.multiselect(
+            "Select Participants for this item",
+            st.session_state.all_participants,
+            key="participant_multiselect"
+        )
+        
+        st.form_submit_button("➕ Add Item", on_click=add_item_callback)
+    
+    # --- Remove Items ---
+    if st.session_state.bill.items:
+        with st.expander("🗑️ Remove an Item"):
             item_names = [item['item_name'] for item in st.session_state.bill.items]
             item_to_remove = st.selectbox("Select item to remove", options=item_names)
+            if st.button("🗑️ Remove Selected Item"):
+                st.session_state.bill.remove_item(item_to_remove)
+                st.success(f"✅ Removed item: {item_to_remove}")
+                st.rerun()
 
-            if st.button("🗑️ Remove Selected Item", key="remove_item_btn"):
-                if item_to_remove:
-                    st.session_state.bill.remove_item(item_to_remove)
-                    st.success(f"✅ Removed item: {item_to_remove}")
-                    st.rerun()
-
-    with col_right:
-        # --- Display Totals and Save ---
-        st.markdown(f"### 📊 {st.session_state.bill.description}")
-        if st.session_state.bill.items:
-            summary_df = create_bill_dataframe(st.session_state.bill)
-            if not summary_df.empty:
-                st.markdown("**Detailed Bill Breakdown:**")
-                def get_table_styler(df):
-                    participant_columns = [p for p in df.columns if p != 'Total Price']
-                    
-                    # Define alternating row colors - subtle and clean
-                    def row_colors(row):
-                        row_idx = df.index.get_loc(row.name)
-                        if row.name == 'Total':
-                            # Total row - soft blue highlight
-                            return ['background-color: #ebf8ff; font-weight: 600; color: #2c5282'] * len(row)
-                        elif row_idx % 2 == 0:
-                            return ['background-color: #ffffff; color: #2d3748'] * len(row)
-                        else:
-                            return ['background-color: #f7fafc; color: #2d3748'] * len(row)
-                    
-                    styles = [
-                        # Clean, readable styling
-                        {'selector': 'th, td', 
-                        'props': [
-                            ('font-size', '0.95rem'), 
-                            ('color', '#2d3748'),
-                            ('border', '1px solid #e2e8f0'),
-                            ('padding', '12px 14px'),
-                            ('font-weight', '500')
-                        ]},
-                        {'selector': 'table', 'props': [
-                            ('border-collapse', 'collapse'), 
-                            ('border', '1px solid #e2e8f0'),
-                            ('border-radius', '8px'),
-                            ('width', '100%'),
-                            ('overflow', 'hidden')
-                        ]},
-                        # Soft blue header for Total Price column
-                        {'selector': 'th.col_heading.level0.col0', 'props': [
-                            ('background-color', '#edf2f7'),
-                            ('color', '#4a5568'), 
-                            ('font-weight', '600'),
-                            ('font-size', '0.95rem'),
-                            ('border-bottom', '2px solid #cbd5e0')
-                        ]},
-                        # Light gray for Total Price data cells
-                        {'selector': 'td.col0', 'props': [('background-color', '#f7fafc'), ('color', '#2d3748'), ('font-weight', '600')]}, 
-                        # Style index column (item names)
-                        {'selector': 'th.row_heading', 'props': [
-                            ('background-color', '#f7fafc'), 
-                            ('color', '#4a5568'), 
-                            ('font-weight', '600'),
-                            ('font-size', '0.95rem')
-                        ]},
-                    ]
-                    # Soft green headers for participant columns
-                    for i, col_name in enumerate(df.columns):
-                        if col_name in participant_columns:
-                            styles.append({'selector': f'th.col_heading.level0.col{i}', 'props': [
-                                ('background-color', '#f0fff4'),
-                                ('color', '#276749'), 
-                                ('font-weight', '600'),
-                                ('font-size', '0.95rem'),
-                                ('border-bottom', '2px solid #9ae6b4')
-                            ]})
-                    
-                    def currency_formatter(val):
-                        if val == 0: return '—'
-                        return f'${val:,.2f}'
-                    
-                    styler = df.style.format(currency_formatter, na_rep='—')
-                    styler.apply(row_colors, axis=1)
-                    styler.set_table_styles(styles)
-                    return styler
-                
-                # Calculate dynamic height based on number of rows
-                num_rows = len(summary_df)
-                row_height = 55  # Approximate height per row in pixels
-                header_height = 65
-                table_height = (num_rows * row_height) + header_height + 20  # Extra padding
-                
-                st.dataframe(get_table_styler(summary_df), use_container_width=True, height=table_height)
-                
-                # Show quick stats
+    # --- Table Section (Full Width) ---
+    st.markdown("---")
+    st.markdown(f"### 📊 {st.session_state.bill.description}")
+    
+    if st.session_state.bill.items:
+        summary_df = create_bill_dataframe(st.session_state.bill)
+        
+        # Column Visibility
+        participant_cols = [c for c in summary_df.columns if c != 'Total Price']
+        
+        cols_to_show = st.multiselect("👁️ Show/Hide Columns", participant_cols, default=participant_cols)
+        
+        if not summary_df.empty:
+            # Filter columns: Total Price + Selected Participants
+            final_cols = ['Total Price'] + cols_to_show
+            df_to_show = summary_df[final_cols]
+            
+            st.dataframe(df_to_show, use_container_width=True)
+            
+            # Totals
+            if 'Total Price' in summary_df.columns:
                 total_bill = summary_df.loc['Total', 'Total Price']
-                num_items = len(st.session_state.bill.items)
-                # Get participant columns (all columns except 'Total Price')
-                all_participant_cols = [p for p in summary_df.columns if p != 'Total Price']
-                num_people = len([p for p in all_participant_cols if summary_df.loc['Total', p] > 0])
-                
-                st.markdown("---")
-                stat_col1, stat_col2, stat_col3 = st.columns(3)
-                with stat_col1:
-                    st.metric("💵 Total Bill", f"${total_bill:,.2f}")
-                with stat_col2:
-                    st.metric("🍽️ Items", num_items)
-                with stat_col3:
-                    st.metric("👥 People", num_people)
-
-                # --- Updated Download Logic ---
-                st.markdown("---")
+                st.metric("💵 Total Bill", f"${total_bill:,.2f}")
+            
+            # Downloads
+            st.markdown("#### 💾 Download Options")
+            c_d1, c_d2 = st.columns(2)
+            with c_d1:
                 json_string = get_bill_as_json_string(st.session_state.bill)
-                if json_string:
-                    st.download_button(
-                        label="📥 Download Bill as JSON",
-                        data=json_string,
-                        file_name=f"{st.session_state.bill.description.replace(' ', '_')}.json",
-                        mime="application/json",
-                    )
-        else:
-            st.info("📋 No items added to the bill yet. Add items from the left panel to see the breakdown here.")
+                st.download_button(
+                    label="📥 Download Bill as JSON",
+                    data=json_string,
+                    file_name=f"{st.session_state.bill.description.replace(' ', '_')}.json",
+                    mime="application/json",
+                )
+            with c_d2:
+                pdf_data = generate_pdf(st.session_state.bill)
+                st.download_button(
+                    label="📄 Download Bill as PDF",
+                    data=pdf_data,
+                    file_name=f"{st.session_state.bill.description.replace(' ', '_')}.pdf",
+                    mime="application/pdf",
+                )
+    else:
+        st.info("📋 No items added to the bill yet. Add items to see the breakdown here.")
 
-# --- Tab 2: Manage Participants & Groups ---
 with tab2:
     st.markdown("### ⚙️ Manage Your Team")
     
-    col_participants, col_groups = st.columns([1, 1], gap="large")
-    
-    with col_participants:
-        with st.expander("👤 Add or Remove Individual Participants", expanded=True):
-            def add_participant_callback():
-                participant_name = st.session_state.participant_input
-                if participant_name and participant_name not in st.session_state.all_participants:
-                    st.session_state.all_participants.append(participant_name)
-                    st.session_state.bill.add_participant(participant_name)
-                    save_participants(st.session_state.all_participants)
-                elif not participant_name: st.warning("Please enter a participant name.")
-                else: st.warning(f"Participant '{participant_name}' already exists.")
-                st.session_state.participant_input = ""
-            st.text_input("Add New Participant", key="participant_input", on_change=add_participant_callback, placeholder="Enter name and press Enter")
-            if st.session_state.all_participants:
-                participants_to_remove = st.multiselect("Select participants to remove permanently", options=sorted(st.session_state.all_participants))
-                if st.button("🗑️ Remove Selected Participants"):
-                    if participants_to_remove:
-                        st.session_state.all_participants = [p for p in st.session_state.all_participants if p not in participants_to_remove]
-                        save_participants(st.session_state.all_participants)
-                        st.success("✅ Removed selected participants.")
-                        st.rerun()
-                    else: st.info("No participants selected to remove.")
-
-    with col_groups:
-        with st.expander("👥 Create, Edit or Delete Groups", expanded=True):
-            with st.form("create_group_form", clear_on_submit=True):
-                st.markdown("**Create a New Group**")
-                new_group_name = st.text_input("New Group Name", placeholder="e.g., Family, Work Team")
-                new_group_members = st.multiselect("Select members for the new group", options=sorted(st.session_state.all_participants))
-                submitted = st.form_submit_button("✨ Create Group")
-                if submitted:
-                    if new_group_name and new_group_members:
-                        st.session_state.groups[new_group_name] = new_group_members
-                        save_groups(st.session_state.groups)
-                        st.success(f"✅ Group '{new_group_name}' created.")
-                    else: st.warning("Please provide a group name and select at least one member.")
-            
-            # --- Edit Existing Groups ---
-            if st.session_state.groups:
-                st.markdown("---")
-                st.markdown("**Edit an Existing Group**")
-                group_to_edit = st.selectbox("Select group to edit", options=list(st.session_state.groups.keys()), key="group_to_edit_selector")
-                
-                if group_to_edit:
-                    current_members = st.session_state.groups.get(group_to_edit, [])
-                    updated_members = st.multiselect(
-                        f"Edit members for '{group_to_edit}'",
-                        options=sorted(st.session_state.all_participants),
-                        default=current_members,
-                        key="edit_group_members"
-                    )
-                    
-                    if st.button("💾 Save Group Changes"):
-                        if updated_members:
-                            st.session_state.groups[group_to_edit] = updated_members
-                            save_groups(st.session_state.groups)
-                            st.success(f"✅ Group '{group_to_edit}' updated.")
-                            st.rerun()
-                        else:
-                            st.warning("A group must have at least one member.")
-                
-                st.markdown("---")
-                st.markdown("**Delete an Existing Group**")
-                group_to_delete = st.selectbox("Select group to delete", options=list(st.session_state.groups.keys()), key="group_to_delete_selector")
-                if st.button("🗑️ Delete Selected Group"):
-                    if group_to_delete:
-                        del st.session_state.groups[group_to_delete]
-                        save_groups(st.session_state.groups)
-                        st.success(f"✅ Group '{group_to_delete}' deleted.")
-                        st.rerun()
-
-    # Current Setup Summary
-    st.markdown("---")
-    st.markdown("### 📋 Current Setup Summary")
-    
-    summary_col1, summary_col2 = st.columns(2)
-    
-    with summary_col1:
+    col_p, col_g = st.columns(2)
+    with col_p:
+        st.markdown("#### 👤 Add or Remove Participants")
+        new_p = st.text_input("Add New Participant", key="new_p_input", placeholder="Enter name")
+        if st.button("Add Participant"):
+            if new_p and new_p not in st.session_state.all_participants:
+                st.session_state.all_participants.append(new_p)
+                st.session_state.bill.add_participant(new_p)
+                save_participants(st.session_state.all_participants)
+                st.success(f"✅ Added {new_p}")
+                st.rerun()
+        
         if st.session_state.all_participants:
-            st.markdown(f"""
-            <div style="background: #f7fafc; padding: 1rem; border-radius: 8px; border: 1px solid #e2e8f0; border-left: 3px solid #5a67d8;">
-                <strong style="color: #4a5568;">👥 Current Participants ({len(st.session_state.all_participants)})</strong><br>
-                <span style="color: #718096; font-size: 0.95rem;">{", ".join(sorted(st.session_state.all_participants))}</span>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.info("No participants added yet.")
-    
-    with summary_col2:
+            st.markdown("#### Remove Participants")
+            rem_p = st.multiselect("Select participants to remove", st.session_state.all_participants)
+            if st.button("🗑️ Remove Selected"):
+                for p in rem_p:
+                    if p in st.session_state.all_participants:
+                        st.session_state.all_participants.remove(p)
+                save_participants(st.session_state.all_participants)
+                st.rerun()
+
+    with col_g:
+        st.markdown("#### 👥 Create Groups")
+        g_name = st.text_input("New Group Name", placeholder="e.g., Family")
+        g_mems = st.multiselect("Select members", st.session_state.all_participants)
+        if st.button("✨ Create Group"):
+            if g_name and g_mems:
+                st.session_state.groups[g_name] = g_mems
+                save_groups(st.session_state.groups)
+                st.success(f"✅ Group '{g_name}' created.")
+                st.rerun()
+        
         if st.session_state.groups:
-            groups_html = "<br>".join([f"<strong>{name}:</strong> {', '.join(members)}" for name, members in st.session_state.groups.items()])
-            st.markdown(f"""
-            <div style="background: #f7fafc; padding: 1rem; border-radius: 8px; border: 1px solid #e2e8f0; border-left: 3px solid #48bb78;">
-                <strong style="color: #4a5568;">🏷️ Available Groups ({len(st.session_state.groups)})</strong><br>
-                <span style="color: #718096; font-size: 0.95rem;">{groups_html}</span>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.info("No groups created yet.")
+            st.markdown("#### 🗑️ Delete Groups")
+            del_g = st.selectbox("Select group to delete", list(st.session_state.groups.keys()))
+            if st.button("Delete Group"):
+                del st.session_state.groups[del_g]
+                save_groups(st.session_state.groups)
+                st.rerun()
+
+    # Summary
+    st.markdown("---")
+    st.markdown(f"**Current Participants:** {', '.join(st.session_state.all_participants)}")
