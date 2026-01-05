@@ -34,6 +34,7 @@ st.markdown("""
     /* Apply font globally */
     html, body, [class*="st-"] {
         font-family: 'Inter', sans-serif;
+        font-size: 18px !important; /* Global font size increase */
     }
     
     /* Main container styling */
@@ -48,35 +49,35 @@ st.markdown("""
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
-        font-size: 3rem !important;
+        font-size: 3.5rem !important; /* Increased */
         font-weight: 700 !important;
         text-align: center;
-        margin-bottom: 0.3rem;
+        margin-bottom: 0.5rem;
     }
     
     .subtitle {
         text-align: center;
         color: #718096;
-        font-size: 1.1rem;
-        margin-bottom: 1.5rem;
+        font-size: 1.3rem !important; /* Increased */
+        margin-bottom: 2rem;
     }
 
     /* Header styles */
     h1 {
-        font-size: 2.5rem !important;
+        font-size: 3rem !important; /* Increased */
         font-weight: 700 !important;
         color: #2d3748 !important;
     }
     h2 {
-        font-size: 1.6rem !important;
+        font-size: 2rem !important; /* Increased */
         font-weight: 600 !important;
         color: #4a5568 !important;
         border-bottom: 2px solid #e2e8f0;
-        padding-bottom: 0.4rem;
-        margin-top: 1.2rem !important;
+        padding-bottom: 0.5rem;
+        margin-top: 1.5rem !important;
     }
     h3 {
-        font-size: 1.25rem !important;
+        font-size: 1.5rem !important; /* Increased */
         font-weight: 600 !important;
         color: #4a5568 !important;
     }
@@ -87,7 +88,7 @@ st.markdown("""
         border: 1px solid #e2e8f0;
         border-radius: 12px !important;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-        margin-bottom: 0.75rem;
+        margin-bottom: 1rem;
     }
     
     .stExpander > div:first-child {
@@ -99,15 +100,15 @@ st.markdown("""
     .stExpander > div:first-child p {
         color: #4a5568 !important;
         font-weight: 600 !important;
-        font-size: 1rem !important;
+        font-size: 1.1rem !important; /* Increased */
     }
 
     /* Styled text inputs - clean borders */
     .stTextInput > div > div > input {
         border: 1.5px solid #e2e8f0;
         border-radius: 8px;
-        padding: 0.75rem 1rem;
-        font-size: 1rem;
+        padding: 0.8rem 1.2rem; /* Increased padding */
+        font-size: 1.1rem !important; /* Increased */
         background: #ffffff;
         transition: all 0.2s ease;
     }
@@ -121,8 +122,8 @@ st.markdown("""
     .stNumberInput > div > div > input {
         border: 1.5px solid #e2e8f0;
         border-radius: 8px;
-        padding: 0.75rem 1rem;
-        font-size: 1rem;
+        padding: 0.8rem 1.2rem;
+        font-size: 1.1rem !important;
         background: #ffffff;
     }
 
@@ -132,8 +133,8 @@ st.markdown("""
         color: white;
         border: none;
         border-radius: 6px;
-        padding: 0.5rem 1rem;
-        font-size: 0.95rem;
+        padding: 0.6rem 1.2rem; /* Increased */
+        font-size: 1.1rem !important; /* Increased */
         font-weight: 500;
         transition: all 0.2s ease;
         box-shadow: 0 2px 4px rgba(90, 103, 216, 0.2);
@@ -151,8 +152,8 @@ st.markdown("""
         color: white;
         border: none;
         border-radius: 8px;
-        padding: 0.7rem 1.25rem;
-        font-size: 1rem;
+        padding: 0.8rem 1.5rem; /* Increased */
+        font-size: 1.1rem !important; /* Increased */
         font-weight: 500;
         width: 100%;
         box-shadow: 0 2px 4px rgba(56, 161, 105, 0.2);
@@ -191,23 +192,25 @@ st.markdown("""
         color: #4a5568;
         border-radius: 6px;
         border: 1px solid #e2e8f0;
+        font-size: 1rem !important; /* Added */
     }
 
     /* Tab styling - clean and minimal */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 4px;
+        gap: 6px;
         background: #f7fafc;
-        padding: 0.4rem;
+        padding: 0.5rem;
         border-radius: 10px;
         border: 1px solid #e2e8f0;
     }
     
     .stTabs [data-baseweb="tab"] {
         border-radius: 8px;
-        padding: 0.6rem 1.5rem;
+        padding: 0.8rem 2rem; /* Increased */
         font-weight: 500;
         color: #718096;
         background: transparent;
+        font-size: 1.1rem !important; /* Increased */
     }
     
     .stTabs [data-baseweb="tab"]:hover {
@@ -222,29 +225,14 @@ st.markdown("""
     }
 
     /* Success/Error/Warning/Info messages - softer */
-    .stSuccess {
-        background: #f0fff4;
+    .stSuccess, .stError, .stWarning, .stInfo {
         border-radius: 8px;
-        border-left: 3px solid #48bb78;
+        font-size: 1.1rem !important;
     }
-    
-    .stError {
-        background: #fff5f5;
-        border-radius: 8px;
-        border-left: 3px solid #fc8181;
-    }
-    
-    .stWarning {
-        background: #fffff0;
-        border-radius: 8px;
-        border-left: 3px solid #ecc94b;
-    }
-    
-    .stInfo {
-        background: #ebf8ff;
-        border-radius: 8px;
-        border-left: 3px solid #63b3ed;
-    }
+    .stSuccess { background: #f0fff4; border-left: 3px solid #48bb78; }
+    .stError { background: #fff5f5; border-left: 3px solid #fc8181; }
+    .stWarning { background: #fffff0; border-left: 3px solid #ecc94b; }
+    .stInfo { background: #ebf8ff; border-left: 3px solid #63b3ed; }
 
     /* Download button - green accent */
     .stDownloadButton > button {
@@ -252,8 +240,8 @@ st.markdown("""
         color: white;
         border: none;
         border-radius: 8px;
-        padding: 0.7rem 1.25rem;
-        font-size: 1rem;
+        padding: 0.8rem 1.5rem; /* Increased */
+        font-size: 1.1rem !important; /* Increased */
         font-weight: 500;
         box-shadow: 0 2px 4px rgba(72, 187, 120, 0.2);
     }
@@ -268,6 +256,7 @@ st.markdown("""
         border-radius: 10px !important;
         overflow: hidden;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        font-size: 1.1rem !important; /* Try to hit outer container too */
     }
 
     /* Form container - clean card */
@@ -275,7 +264,7 @@ st.markdown("""
         background: #ffffff;
         border: 1px solid #e2e8f0;
         border-radius: 12px;
-        padding: 1.25rem;
+        padding: 1.5rem; /* Increased */
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
     }
 
@@ -284,19 +273,20 @@ st.markdown("""
         background: #ffffff;
         border: 1px solid #e2e8f0;
         border-radius: 10px;
-        padding: 0.75rem;
+        padding: 1rem; /* Increased */
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
     }
     
     /* Metric value styling */
     [data-testid="stMetricValue"] {
         color: #2d3748 !important;
+        font-size: 2.5rem !important; /* Explicitly large */
     }
 
     /* Divider styling */
     hr {
         border-color: #e2e8f0;
-        margin: 1rem 0;
+        margin: 1.5rem 0;
     }
 
 </style>
@@ -483,7 +473,13 @@ with tab1:
             final_cols = ['Total Price'] + cols_to_show
             df_to_show = summary_df[final_cols]
             
-            st.dataframe(df_to_show, use_container_width=True)
+            st.dataframe(
+                df_to_show.style.set_properties(**{
+                    'font-size': '16px', 
+                    'color': 'black'
+                }), 
+                use_container_width=True
+            )
             
             # Totals
             if 'Total Price' in summary_df.columns:
