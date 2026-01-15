@@ -257,6 +257,7 @@ st.markdown("""
         overflow: hidden;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
         font-size: 1.1rem !important; /* Try to hit outer container too */
+        width: 80% !important;
     }
 
     /* Form container - clean card */
@@ -471,14 +472,20 @@ with tab1:
         if not summary_df.empty:
             # Filter columns: Total Price + Selected Participants
             final_cols = ['Total Price'] + cols_to_show
-            df_to_show = summary_df[final_cols]
+            df_to_show = summary_df[final_cols].round(2)
+            
+            # Custom formatter: show dash for zero values
+            def format_value(val):
+                if val == 0:
+                    return "-"
+                return f"{val:.2f}"
             
             st.dataframe(
                 df_to_show.style.set_properties(**{
                     'font-size': '16px', 
                     'color': 'black'
-                }), 
-                use_container_width=True
+                }).format(format_value), 
+                use_container_width=False
             )
             
             # Totals
